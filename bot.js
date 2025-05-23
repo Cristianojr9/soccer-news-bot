@@ -12,35 +12,108 @@ const client = new Client({
     ]
 });
 
-// API endpoints (you'll need to replace these with actual API endpoints)
-const SPORTS_API_BASE = "https://api.example.com"; // Replace with actual API endpoint
+// Football Data API configuration
+const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY;
+const FOOTBALL_API_BASE = 'http://api.football-data.org/v4';
 
-// Function to fetch live games
-async function fetchLiveGames(sport) {
+// Store matches data
+let cachedMatches = null;
+let lastFetchTime = null;
+
+// Function to fetch matches from football-data.org
+async function fetchFootballMatches() {
     try {
-        const response = await axios.get(`${SPORTS_API_BASE}/${sport}/live`);
+        const response = await axios.get(`${FOOTBALL_API_BASE}/matches`, {
+            headers: {
+                'X-Auth-Token': FOOTBALL_API_KEY,
+                'X-Unfold-Goals': 'true'
+            }
+        });
         return response.data;
     } catch (error) {
-        console.error(`Error fetching ${sport} games:`, error.message);
+        console.error('Error fetching football matches:', error.message);
         return null;
     }
 }
 
-// Function to format game information
-function formatGameInfo(game, sport) {
-    if (!game) return "No live games available";
+// Function to format match information
+function formatMatchInfo(match) {
+    const homeTeam = match.homeTeam.name;
+    const awayTeam = match.awayTeam.name;
+    const status = match.status;
+    const score = match.score;
+    const competition = match.competition.name;
+    const utcDate = new Date(match.utcDate);
+    const localTime = utcDate.toLocaleString();
+
+    let scoreText = 'vs';
+    if (status === 'FINISHED') {
+        scoreText = `${score.fullTime.home} - ${score.fullTime.away}`;
+    } else if (status === 'IN_PLAY' || status === 'PAUSED') {
+        scoreText = `${score.halfTime.home} - ${score.halfTime.away}`;
+    }
 
     return `
-**${game.home_team || 'Unknown'} vs ${game.away_team || 'Unknown'}**
-🏟️ League: ${game.league || 'Unknown'}
-📺 Stream: ${game.stream_url || 'No stream available'}
-⏰ Time: ${game.time || 'Unknown'}
+**${homeTeam} ${scoreText} ${awayTeam}**
+🏆 Competition: ${competition}
+⏰ Time: ${localTime}
+📊 Status: ${status}
 `;
+}
+
+// Function to create and send matches embed
+async function sendMatchesEmbed(channel) {
+    if (!cachedMatches) {
+        cachedMatches = await fetchFootballMatches();
+        lastFetchTime = new Date();
+    }
+
+    if (!cachedMatches) {
+        await channel.send('Unable to fetch matches at the moment.');
+        return;
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('⚽ Today\'s Football Matches')
+        .setColor('#00ff00')
+        .setTimestamp()
+        .setFooter({ text: `Last updated: ${lastFetchTime.toLocaleString()}` });
+
+    const matches = cachedMatches.matches;
+    if (matches && matches.length > 0) {
+        matches.forEach(match => {
+            const matchInfo = formatMatchInfo(match);
+            embed.addFields({ name: 'Match', value: matchInfo, inline: false });
+        });
+    } else {
+        embed.setDescription('No matches scheduled for today.');
+    }
+
+    await channel.send({ embeds: [embed] });
+}
+
+// Schedule daily updates
+function scheduleDailyUpdates() {
+    const now = new Date();
+    const updateTime = new Date(now);
+    updateTime.setHours(0, 0, 0, 0); // Set to midnight
+
+    if (now > updateTime) {
+        updateTime.setDate(updateTime.getDate() + 1); // Set to next day
+    }
+
+    const timeUntilUpdate = updateTime - now;
+    setTimeout(() => {
+        cachedMatches = null; // Clear cache
+        lastFetchTime = null;
+        scheduleDailyUpdates(); // Schedule next update
+    }, timeUntilUpdate);
 }
 
 // When the client is ready, run this code (only once)
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
+    scheduleDailyUpdates();
 });
 
 // Command handler
@@ -50,163 +123,16 @@ client.on('messageCreate', async (message) => {
     const command = message.content.slice(1).toLowerCase();
 
     switch (command) {
-        case 'live':
-            await showAllLive(message);
+        case 'matches':
+            await sendMatchesEmbed(message.channel);
             break;
-        case 'soccer':
-            await showSoccer(message);
-            break;
-        case 'esports':
-            await showCSGO(message);
-            break;
-        case 'nfl':
-            await showNFL(message);
-            break;
-        case 'nba':
-            await showNBA(message);
-            break;
-        case 'mlb':
-            await showMLB(message);
-            break;
-        case 'tabletennis':
-            await showTableTennis(message);
+        case 'refresh':
+            cachedMatches = null;
+            lastFetchTime = null;
+            await sendMatchesEmbed(message.channel);
             break;
     }
 });
-
-// Command functions
-async function showAllLive(message) {
-    const sports = ['soccer', 'csgo', 'tabletennis', 'nfl', 'nba', 'mlb'];
-    const embed = new EmbedBuilder()
-        .setTitle('🎮 Live Games')
-        .setDescription('Current live games across all sports')
-        .setColor('#0099ff')
-        .setTimestamp();
-
-    for (const sport of sports) {
-        const games = await fetchLiveGames(sport);
-        if (games && games.length > 0) {
-            const gameInfo = formatGameInfo(games[0], sport);
-            embed.addFields({ name: sport.toUpperCase(), value: gameInfo, inline: false });
-        }
-    }
-
-    await message.reply({ embeds: [embed] });
-}
-
-async function showSoccer(message) {
-    const games = await fetchLiveGames('soccer');
-    if (games && games.length > 0) {
-        const embed = new EmbedBuilder()
-            .setTitle('⚽ Live Soccer Games')
-            .setColor('#00ff00')
-            .setTimestamp();
-
-        games.forEach(game => {
-            const gameInfo = formatGameInfo(game, 'soccer');
-            embed.addFields({ name: 'Match', value: gameInfo, inline: false });
-        });
-
-        await message.reply({ embeds: [embed] });
-    } else {
-        await message.reply('No live soccer games available at the moment.');
-    }
-}
-
-async function showCSGO(message) {
-    const games = await fetchLiveGames('csgo');
-    if (games && games.length > 0) {
-        const embed = new EmbedBuilder()
-            .setTitle('🎮 Live CS:GO Games')
-            .setColor('#ff9900')
-            .setTimestamp();
-
-        games.forEach(game => {
-            const gameInfo = formatGameInfo(game, 'csgo');
-            embed.addFields({ name: 'Match', value: gameInfo, inline: false });
-        });
-
-        await message.reply({ embeds: [embed] });
-    } else {
-        await message.reply('No live CS:GO games available at the moment.');
-    }
-}
-
-async function showNFL(message) {
-    const games = await fetchLiveGames('nfl');
-    if (games && games.length > 0) {
-        const embed = new EmbedBuilder()
-            .setTitle('🏈 Live NFL Games')
-            .setColor('#ff0000')
-            .setTimestamp();
-
-        games.forEach(game => {
-            const gameInfo = formatGameInfo(game, 'nfl');
-            embed.addFields({ name: 'Match', value: gameInfo, inline: false });
-        });
-
-        await message.reply({ embeds: [embed] });
-    } else {
-        await message.reply('No live NFL games available at the moment.');
-    }
-}
-
-async function showNBA(message) {
-    const games = await fetchLiveGames('nba');
-    if (games && games.length > 0) {
-        const embed = new EmbedBuilder()
-            .setTitle('🏀 Live NBA Games')
-            .setColor('#ff9900')
-            .setTimestamp();
-
-        games.forEach(game => {
-            const gameInfo = formatGameInfo(game, 'nba');
-            embed.addFields({ name: 'Match', value: gameInfo, inline: false });
-        });
-
-        await message.reply({ embeds: [embed] });
-    } else {
-        await message.reply('No live NBA games available at the moment.');
-    }
-}
-
-async function showMLB(message) {
-    const games = await fetchLiveGames('mlb');
-    if (games && games.length > 0) {
-        const embed = new EmbedBuilder()
-            .setTitle('⚾ Live MLB Games')
-            .setColor('#0000ff')
-            .setTimestamp();
-
-        games.forEach(game => {
-            const gameInfo = formatGameInfo(game, 'mlb');
-            embed.addFields({ name: 'Match', value: gameInfo, inline: false });
-        });
-
-        await message.reply({ embeds: [embed] });
-    } else {
-        await message.reply('No live MLB games available at the moment.');
-    }
-}
-
-async function showTableTennis(message) {
-    const games = await fetchLiveGames('tabletennis');
-    if (games && games.length > 0) {
-        const embed = new EmbedBuilder()
-            .setTitle('🏓 Live Table Tennis Games')
-            .setColor('#9900ff')
-            .setTimestamp();
-
-        games.forEach(game => {
-            const gameInfo = formatGameInfo(game, 'tabletennis');
-            embed.addFields({ name: 'Match', value: gameInfo, inline: false });
-        });
-
-        await message.reply({ embeds: [embed] });
-    } else {
-        await message.reply('No live table tennis games available at the moment.');
-    }
-}
 
 // Login to Discord with your client's token
 client.login(process.env.DISCORD_TOKEN); 

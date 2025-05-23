@@ -1,12 +1,13 @@
 # Sports Live Discord Bot
 
-A Discord bot that displays live sports games and their streaming information for various sports including:
-- Soccer
-- CS:GO
-- Table Tennis
-- NFL
-- NBA
-- MLB
+A Discord bot that displays live football matches using the football-data.org API.
+
+## Features
+
+- Shows all football matches for the day
+- Updates automatically at midnight
+- Displays match status, scores, and competition information
+- Caches data to respect API rate limits (10 calls per minute)
 
 ## Setup
 
@@ -19,9 +20,10 @@ A Discord bot that displays live sports games and their streaming information fo
 npm install
 ```
 
-3. Create a `.env` file in the root directory and add your Discord bot token:
+3. Create a `.env` file in the root directory with your tokens:
 ```
 DISCORD_TOKEN=your_discord_bot_token_here
+FOOTBALL_API_KEY=your_football_data_api_key_here
 ```
 
 4. Run the bot:
@@ -31,13 +33,15 @@ npm start
 
 ## Commands
 
-- `!live` - Display all live games across all supported sports
-- `!soccer` - Display live soccer games
-- `!esports` - Display live CS:GO games
-- `!nfl` - Display live NFL games
-- `!nba` - Display live NBA games
-- `!mlb` - Display live MLB games
-- `!tabletennis` - Display live table tennis games
+- `!matches` - Display all football matches for the day
+- `!refresh` - Force refresh the matches data
+
+## API Information
+
+This bot uses the [football-data.org](https://www.football-data.org/) API, which has the following limitations:
+- Free tier: 10 calls per minute
+- Data is cached and updated once per day at midnight
+- Manual refresh available via `!refresh` command
 
 ## Note
 
