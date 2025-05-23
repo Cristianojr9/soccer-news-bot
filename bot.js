@@ -16,12 +16,43 @@ const client = new Client({
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY;
 const FOOTBALL_API_BASE = 'http://api.football-data.org/v4';
 
-// Store matches data
+// Store matches data and API call tracking
 let cachedMatches = null;
 let lastFetchTime = null;
+let apiCallsInLastMinute = 0;
+let lastApiCallTime = null;
+const API_CALL_LIMIT = 10; // 10 calls per minute limit
+const API_CALL_WINDOW = 60000; // 1 minute in milliseconds
+
+// Function to check if we're close to API limit
+function isNearApiLimit() {
+    if (!lastApiCallTime) return false;
+    
+    const timeSinceLastCall = Date.now() - lastApiCallTime;
+    if (timeSinceLastCall > API_CALL_WINDOW) {
+        apiCallsInLastMinute = 0;
+        return false;
+    }
+    
+    return apiCallsInLastMinute >= API_CALL_LIMIT - 2; // Leave 2 calls buffer
+}
+
+// Function to track API calls
+function trackApiCall() {
+    const now = Date.now();
+    if (lastApiCallTime && now - lastApiCallTime > API_CALL_WINDOW) {
+        apiCallsInLastMinute = 0;
+    }
+    apiCallsInLastMinute++;
+    lastApiCallTime = now;
+}
 
 // Function to fetch matches from football-data.org
 async function fetchFootballMatches() {
+    if (isNearApiLimit()) {
+        throw new Error('API rate limit nearly reached. Please try again later.');
+    }
+
     try {
         const response = await axios.get(`${FOOTBALL_API_BASE}/matches`, {
             headers: {
@@ -29,6 +60,7 @@ async function fetchFootballMatches() {
                 'X-Unfold-Goals': 'true'
             }
         });
+        trackApiCall();
         return response.data;
     } catch (error) {
         console.error('Error fetching football matches:', error.message);
@@ -64,8 +96,13 @@ function formatMatchInfo(match) {
 // Function to create and send matches embed
 async function sendMatchesEmbed(channel) {
     if (!cachedMatches) {
-        cachedMatches = await fetchFootballMatches();
-        lastFetchTime = new Date();
+        try {
+            cachedMatches = await fetchFootballMatches();
+            lastFetchTime = new Date();
+        } catch (error) {
+            await channel.send('Unable to fetch matches at the moment. API rate limit nearly reached.');
+            return;
+        }
     }
 
     if (!cachedMatches) {
@@ -92,11 +129,11 @@ async function sendMatchesEmbed(channel) {
     await channel.send({ embeds: [embed] });
 }
 
-// Schedule daily updates
+// Function to schedule daily updates at 9 AM
 function scheduleDailyUpdates() {
     const now = new Date();
     const updateTime = new Date(now);
-    updateTime.setHours(0, 0, 0, 0); // Set to midnight
+    updateTime.setHours(9, 0, 0, 0); // Set to 9 AM
 
     if (now > updateTime) {
         updateTime.setDate(updateTime.getDate() + 1); // Set to next day
@@ -104,9 +141,18 @@ function scheduleDailyUpdates() {
 
     const timeUntilUpdate = updateTime - now;
     setTimeout(() => {
-        cachedMatches = null; // Clear cache
-        lastFetchTime = null;
-        scheduleDailyUpdates(); // Schedule next update
+        // Send matches to all guilds
+        client.guilds.cache.forEach(guild => {
+            const defaultChannel = guild.channels.cache.find(channel => 
+                channel.type === 0 && channel.permissionsFor(guild.members.me).has('SendMessages')
+            );
+            if (defaultChannel) {
+                sendMatchesEmbed(defaultChannel);
+            }
+        });
+
+        // Schedule next update
+        scheduleDailyUpdates();
     }, timeUntilUpdate);
 }
 
@@ -124,9 +170,17 @@ client.on('messageCreate', async (message) => {
 
     switch (command) {
         case 'matches':
+            if (isNearApiLimit()) {
+                await message.reply('Sorry, the API rate limit is nearly reached. Please try again in a minute.');
+                return;
+            }
             await sendMatchesEmbed(message.channel);
             break;
         case 'refresh':
+            if (isNearApiLimit()) {
+                await message.reply('Sorry, the API rate limit is nearly reached. Please try again in a minute.');
+                return;
+            }
             cachedMatches = null;
             lastFetchTime = null;
             await sendMatchesEmbed(message.channel);
