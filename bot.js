@@ -14,7 +14,7 @@ const client = new Client({
 
 // Football Data API configuration
 const FOOTBALL_API_KEY = process.env.FOOTBALL_API_KEY;
-const FOOTBALL_API_BASE = 'http://api.football-data.org/v4';
+const FOOTBALL_API_BASE = process.env.FOOTBALL_API_BASE;
 
 // Store matches data and API call tracking
 let cachedMatches = null;
