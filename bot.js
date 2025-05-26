@@ -1,8 +1,8 @@
 const http = require('http');
 
 const server = http.createServer((req, res) => {
-    // Handle /get route
-    if (req.url === '/get' && req.method === 'GET') {
+    // Handle / route
+    if (req.url === '/' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             message: 'Hello from the server!',
