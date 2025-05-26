@@ -1,3 +1,24 @@
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+    // Handle /get route
+    if (req.url === '/get' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+            message: 'Hello from the server!',
+            timestamp: new Date().toISOString()
+        }));
+        return;
+    }
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    console.log(`Test the /get route at: http://localhost:${PORT}/get`);
+}); 
+
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const axios = require('axios');

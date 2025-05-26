@@ -4,11 +4,16 @@
   "description": "Discord bot for live sports updates",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node bot.js",
+    "server": "node server.js",
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.1",
     "axios": "^1.6.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
   }
 } 
